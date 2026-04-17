@@ -1,0 +1,389 @@
+/* ============================================
+   AEGIS — Incident Management Styles
+   ============================================ */
+
+/* --- Incident Header --- */
+.incident-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-xl);
+}
+
+.incident-stats {
+  display: flex;
+  gap: var(--space-lg);
+}
+
+.incident-stat {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.incident-stat-value {
+  font-size: 1.1rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+}
+
+.incident-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* --- Kanban Board --- */
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-lg);
+  height: calc(100vh - 180px);
+}
+
+.kanban-column {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.kanban-column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.kanban-column-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.kanban-column-count {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.kanban-column.reported .kanban-column-title { color: var(--severity-critical); }
+.kanban-column.acknowledged .kanban-column-title { color: var(--severity-high); }
+.kanban-column.in-progress .kanban-column-title { color: var(--accent-blue); }
+.kanban-column.resolved .kanban-column-title { color: var(--severity-low); }
+
+.kanban-column.reported .kanban-column-header { border-bottom-color: rgba(239, 68, 68, 0.2); }
+.kanban-column.acknowledged .kanban-column-header { border-bottom-color: rgba(249, 115, 22, 0.2); }
+.kanban-column.in-progress .kanban-column-header { border-bottom-color: rgba(59, 130, 246, 0.2); }
+.kanban-column.resolved .kanban-column-header { border-bottom-color: rgba(34, 197, 94, 0.2); }
+
+.kanban-cards {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.kanban-cards.drag-over {
+  background: var(--bg-glass-light);
+}
+
+/* --- Incident Cards --- */
+.incident-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  cursor: grab;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.incident-card:hover {
+  border-color: var(--border-medium);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.incident-card:active {
+  cursor: grabbing;
+}
+
+.incident-card.dragging {
+  opacity: 0.5;
+  transform: scale(0.95);
+}
+
+.incident-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-sm);
+}
+
+.incident-card-id {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+}
+
+.incident-card-type {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.incident-card-type svg {
+  width: 14px;
+  height: 14px;
+}
+
+.incident-card-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: var(--space-xs);
+  line-height: 1.3;
+}
+
+.incident-card-location {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: var(--space-md);
+}
+
+.incident-card-location svg {
+  width: 12px;
+  height: 12px;
+}
+
+.incident-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.incident-card-time {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.incident-card-assignees {
+  display: flex;
+}
+
+.incident-card-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: white;
+  margin-left: -6px;
+}
+
+.incident-card-avatar:first-child {
+  margin-left: 0;
+}
+
+/* --- Incident Detail Panel --- */
+.incident-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+
+.incident-detail-overlay.active {
+  pointer-events: all;
+  opacity: 1;
+}
+
+.incident-detail-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.incident-detail-panel {
+  width: 480px;
+  max-width: 90vw;
+  height: 100vh;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-medium);
+  padding: var(--space-2xl);
+  overflow-y: auto;
+  position: relative;
+  z-index: 1;
+  transform: translateX(100%);
+  transition: transform var(--transition-base);
+}
+
+.incident-detail-overlay.active .incident-detail-panel {
+  transform: translateX(0);
+}
+
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-2xl);
+}
+
+.detail-close {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.detail-close:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.detail-section {
+  margin-bottom: var(--space-2xl);
+}
+
+.detail-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-md);
+}
+
+/* --- Timeline --- */
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-subtle);
+}
+
+.timeline-item {
+  display: flex;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  position: relative;
+}
+
+.timeline-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  background: var(--bg-tertiary);
+  border: 2px solid var(--border-medium);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.timeline-dot svg {
+  width: 12px;
+  height: 12px;
+}
+
+.timeline-dot.critical {
+  border-color: var(--severity-critical);
+  background: var(--severity-critical-dim);
+  color: var(--severity-critical);
+}
+
+.timeline-dot.active {
+  border-color: var(--accent-blue);
+  background: var(--accent-blue-dim);
+  color: var(--accent-blue);
+}
+
+.timeline-dot.done {
+  border-color: var(--severity-low);
+  background: var(--severity-low-dim);
+  color: var(--severity-low);
+}
+
+.timeline-content {
+  flex: 1;
+  padding-bottom: var(--space-md);
+}
+
+.timeline-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.timeline-desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.timeline-time {
+  font-size: 0.65rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
+/* --- Incident Actions --- */
+.incident-actions {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: var(--space-lg);
+}

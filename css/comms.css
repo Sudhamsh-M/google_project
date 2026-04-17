@@ -1,0 +1,480 @@
+/* ============================================
+   AEGIS — Communications Hub Styles
+   ============================================ */
+
+/* --- Comms Layout --- */
+.comms-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr 280px;
+  gap: 0;
+  height: calc(100vh - 130px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+/* --- Channel List --- */
+.channel-list {
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.channel-list-header {
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.channel-list-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.channel-search {
+  padding: var(--space-md) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.channel-search input {
+  width: 100%;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+}
+
+.channel-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-sm);
+}
+
+.channel-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  position: relative;
+}
+
+.channel-item:hover {
+  background: var(--bg-hover);
+}
+
+.channel-item.active {
+  background: var(--accent-blue-dim);
+}
+
+.channel-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.channel-icon.emergency { background: var(--severity-critical-dim); color: var(--severity-critical); }
+.channel-icon.incident { background: var(--severity-high-dim); color: var(--severity-high); }
+.channel-icon.general { background: var(--accent-blue-dim); color: var(--accent-blue); }
+.channel-icon.team { background: var(--severity-low-dim); color: var(--severity-low); }
+
+.channel-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.channel-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-preview {
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.channel-badge {
+  width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  background: var(--accent-blue);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.channel-time {
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+/* --- Message Area --- */
+.message-area {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.message-header {
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.message-channel-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.message-channel-status {
+  font-size: 0.72rem;
+  color: var(--text-tertiary);
+}
+
+.message-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* --- Messages --- */
+.message {
+  display: flex;
+  gap: var(--space-md);
+  max-width: 80%;
+}
+
+.message.own {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.message-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+}
+
+.message-body {
+  flex: 1;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-xs);
+}
+
+.message-sender {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.message-role {
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.message-timestamp {
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+}
+
+.message-bubble {
+  padding: var(--space-md) var(--space-lg);
+  border-radius: var(--radius-md);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+}
+
+.message.own .message-bubble {
+  background: var(--accent-blue-dim);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.message-bubble.priority-critical {
+  border-left: 3px solid var(--severity-critical);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.message-bubble.priority-urgent {
+  border-left: 3px solid var(--severity-high);
+  background: rgba(249, 115, 22, 0.05);
+}
+
+.message-bubble.priority-flash {
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* --- Message Input --- */
+.message-input-area {
+  padding: var(--space-lg) var(--space-xl);
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.message-input-wrapper {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: flex-end;
+}
+
+.message-input {
+  flex: 1;
+  padding: var(--space-md) var(--space-lg);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+  resize: none;
+  max-height: 100px;
+  min-height: 40px;
+  transition: border-color var(--transition-fast);
+}
+
+.message-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.message-input-actions {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.message-send-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-blue);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.message-send-btn:hover {
+  background: #2563eb;
+}
+
+.message-send-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.priority-select {
+  height: 40px;
+  padding: 0 var(--space-md);
+  font-size: 0.72rem;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+/* --- Broadcast Panel --- */
+.broadcast-panel {
+  border-left: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.broadcast-header {
+  padding: var(--space-lg) var(--space-xl);
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.broadcast-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.broadcast-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.broadcast-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.broadcast-section-title {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* --- Emergency Services Link --- */
+.emergency-service {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.emergency-service:hover {
+  border-color: var(--border-medium);
+  background: var(--bg-hover);
+}
+
+.emergency-service-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emergency-service-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.emergency-service-name {
+  flex: 1;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.emergency-service-status {
+  font-size: 0.6rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+/* --- Personnel Section in Comms --- */
+.personnel-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-sm);
+}
+
+.personnel-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.personnel-item:hover {
+  border-color: var(--border-medium);
+}
+
+.personnel-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: white;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.personnel-avatar .status-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: var(--radius-full);
+  border: 2px solid transparent;
+}
+
+.personnel-avatar .status-ring.available { border-color: var(--status-available); }
+.personnel-avatar .status-ring.responding { border-color: var(--status-responding); }
+.personnel-avatar .status-ring.engaged { border-color: var(--status-engaged); }
+
+.personnel-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.personnel-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.personnel-role {
+  font-size: 0.62rem;
+  color: var(--text-tertiary);
+}

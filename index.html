@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AEGIS — Crisis Response Command Center</title>
+  <meta name="description" content="Advanced Emergency Guidance & Incident System — Real-time crisis coordination for hospitality venues">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/index.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/dashboard.css">
+  <link rel="stylesheet" href="css/incidents.css">
+  <link rel="stylesheet" href="css/comms.css">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <!-- ===== Sidebar ===== -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-logo" title="AEGIS">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M12 8v4" stroke-width="2.5"/>
+          <circle cx="12" cy="16" r="1" fill="white"/>
+        </svg>
+      </div>
+
+      <div class="sidebar-nav">
+        <div class="nav-item active" data-view="dashboard" title="Dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="3" y="3" width="7" height="9" rx="1"/>
+            <rect x="14" y="3" width="7" height="5" rx="1"/>
+            <rect x="14" y="12" width="7" height="9" rx="1"/>
+            <rect x="3" y="16" width="7" height="5" rx="1"/>
+          </svg>
+          <span>Dashboard</span>
+        </div>
+
+        <div class="nav-item" data-view="incidents" title="Incidents">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>Incidents</span>
+          <div class="badge"></div>
+        </div>
+
+        <div class="nav-item" data-view="comms" title="Communications">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
+          </svg>
+          <span>Comms</span>
+        </div>
+
+        <div class="nav-item" data-view="personnel" title="Personnel">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 00-3-3.87"/>
+            <path d="M16 3.13a4 4 0 010 7.75"/>
+          </svg>
+          <span>Personnel</span>
+        </div>
+
+        <div class="nav-item" data-view="map" title="Venue Map">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/>
+            <path d="M9 22v-4h6v4"/>
+            <line x1="8" y1="6" x2="8" y2="6.01"/>
+            <line x1="12" y1="6" x2="12" y2="6.01"/>
+            <line x1="16" y1="6" x2="16" y2="6.01"/>
+            <line x1="8" y1="10" x2="8" y2="10.01"/>
+            <line x1="12" y1="10" x2="12" y2="10.01"/>
+            <line x1="16" y1="10" x2="16" y2="10.01"/>
+            <line x1="8" y1="14" x2="8" y2="14.01"/>
+            <line x1="12" y1="14" x2="12" y2="14.01"/>
+            <line x1="16" y1="14" x2="16" y2="14.01"/>
+          </svg>
+          <span>Venue</span>
+        </div>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div style="padding: 0 12px; width: 100%;">
+        <div class="nav-item" style="color: var(--text-tertiary); opacity: 0.5;" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </div>
+      </div>
+    </nav>
+
+    <!-- ===== Main Area ===== -->
+    <div class="main-area">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <div>
+            <div class="topbar-title" id="topbar-title">Command Dashboard</div>
+            <div class="topbar-subtitle">Grand Meridian Hotel & Resort</div>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <div class="threat-badge green">
+            <div class="dot"></div>
+            GREEN
+          </div>
+          <div>
+            <div class="topbar-clock">--:--:--</div>
+            <div class="topbar-date">Loading...</div>
+          </div>
+          <div class="topbar-user">
+            <div class="topbar-user-avatar">OP</div>
+            <div class="topbar-user-info">
+              <div class="topbar-user-name">Operations Lead</div>
+              <div class="topbar-user-role">Command Center</div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Content Views -->
+      <main class="content">
+        <div class="view active" id="view-dashboard"></div>
+        <div class="view" id="view-incidents"></div>
+        <div class="view" id="view-comms"></div>
+        <div class="view" id="view-personnel"></div>
+        <div class="view" id="view-map"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Overlay -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal-content"></div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Scripts (order matters) -->
+  <script src="js/utils.js"></script>
+  <script src="js/simulator.js"></script>
+  <script src="js/dashboard.js"></script>
+  <script src="js/incidents.js"></script>
+  <script src="js/comms.js"></script>
+  <script src="js/personnel.js"></script>
+  <script src="js/maps.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
