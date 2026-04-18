@@ -387,3 +387,24 @@
   gap: var(--space-sm);
   margin-top: var(--space-lg);
 }
+
+.ai-recommendation {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 0.92rem;
+}
+
+.ai-loading {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.detail-section button {
+  margin-top: 12px;
+}

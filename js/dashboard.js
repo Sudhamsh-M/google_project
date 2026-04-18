@@ -105,6 +105,44 @@ const DashboardView = {
           </div>
         </div>
 
+        <!-- Guest Notifications -->
+        <div class="guest-notifications">
+          <div class="card-header" style="margin-bottom: 0;">
+            <div class="card-title">Guest Notifications</div>
+            <div class="flex items-center gap-sm">
+              <div class="status-dot available" id="guest-notif-dot"></div>
+              <span class="text-xs text-tertiary" id="guest-sub-count">0 guests</span>
+            </div>
+          </div>
+          <div class="quick-actions-grid">
+            <button class="quick-action-btn qr-code" onclick="DashboardView.showQRModal()" id="btn-qr-code">
+              ${Icons.building}
+              <span>Room QR</span>
+            </button>
+            <button class="quick-action-btn alert-guests" onclick="DashboardView.showGuestAlertModal()" id="btn-alert-guests">
+              ${Icons.bell}
+              <span>Alert Guests</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulation Controls -->
+        <div class="simulation-controls">
+          <div class="card-header" style="margin-bottom: 0;">
+            <div class="card-title">Simulation Controls</div>
+          </div>
+          <div class="quick-actions-grid">
+            <button class="quick-action-btn auto-gen ${Simulator.autoGenerate ? 'active' : ''}" onclick="DashboardView.toggleAutoGenerate()" id="btn-auto-gen">
+              ${Icons.activity}
+              <span>${Simulator.autoGenerate ? 'Auto Events' : 'Manual Only'}</span>
+            </button>
+            <button class="quick-action-btn trigger-event" onclick="DashboardView.triggerManualEvent()" id="btn-trigger-event">
+              ${Icons.zap}
+              <span>Trigger Event</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Alert Feed -->
         <div class="alert-feed">
           <div class="card-header" style="margin-bottom: 0;">
@@ -209,6 +247,7 @@ const DashboardView = {
 
     this.drawGauge();
     this.bindEvents();
+    this.fetchGuestCount();
   },
 
   renderAlertFeed() {
@@ -306,15 +345,12 @@ const DashboardView = {
         <div class="alert-item-time">Just now</div>
       </div>
     `;
-
     list.insertAdjacentHTML('afterbegin', html);
-
     // Keep max 20 alerts
     while (list.children.length > 20) {
       list.removeChild(list.lastChild);
     }
   },
-
   updateThreatDisplay() {
     this.drawGauge();
     const badge = document.getElementById('threat-badge-main');
@@ -345,6 +381,14 @@ const DashboardView = {
       btn.classList.add('pulse-critical');
       btn.innerHTML = `${Icons.lock}<span>ACTIVE</span>`;
     }
+    // Notify guests via push
+    this.notifyGuests({
+      title: '🚨 LOCKDOWN — Grand Meridian Hotel',
+      body: 'LOCKDOWN IN EFFECT. Lock your door and stay inside your room. Do not open for anyone except hotel security. Await further instructions.',
+      severity: 'critical',
+      type: 'lockdown',
+      crisisType: 'Lockdown',
+    });
   },
 
   handleEvacuate() {
@@ -354,12 +398,28 @@ const DashboardView = {
       btn.classList.add('pulse-warning');
       btn.innerHTML = `${Icons.logOut}<span>IN PROGRESS</span>`;
     }
+    // Notify guests via push
+    this.notifyGuests({
+      title: '🚨 EVACUATE NOW — Grand Meridian Hotel',
+      body: 'EVACUATION ORDER. Leave your room immediately. Use stairs ONLY. Proceed to the nearest exit. Open the AEGIS app for your personal evacuation route.',
+      severity: 'critical',
+      type: 'evacuation',
+      crisisType: 'Evacuation',
+    });
   },
 
   handleAllClear() {
     Simulator.triggerAllClear();
     document.getElementById('btn-lockdown')?.classList.remove('pulse-critical');
     document.getElementById('btn-evacuate')?.classList.remove('pulse-warning');
+    // Notify guests
+    this.notifyGuests({
+      title: '✅ ALL CLEAR — Grand Meridian Hotel',
+      body: 'The emergency has been resolved. It is now safe to return to your room. Thank you for your cooperation.',
+      severity: 'low',
+      type: 'all-clear',
+      crisisType: 'All Clear',
+    });
   },
 
   handleBackup() {
@@ -369,5 +429,239 @@ const DashboardView = {
       btn.classList.add('pulse-blue');
       setTimeout(() => btn.classList.remove('pulse-blue'), 5000);
     }
+  },
+
+  toggleAutoGenerate() {
+    const enabled = Simulator.toggleAutoGenerate();
+    const btn = document.getElementById('btn-auto-gen');
+    if (btn) {
+      btn.classList.toggle('active', enabled);
+      btn.innerHTML = `${Icons.activity}<span>${enabled ? 'Auto Events' : 'Manual Only'}</span>`;
+    }
+    Toast.show('info', 'Simulation Mode', enabled ? 'Auto event generation enabled' : 'Auto event generation disabled');
+  },
+
+  triggerManualEvent() {
+    Simulator.triggerManualAlert();
+    const btn = document.getElementById('btn-trigger-event');
+    if (btn) {
+      btn.classList.add('pulse-blue');
+      setTimeout(() => btn.classList.remove('pulse-blue'), 1000);
+    }
+  },
+
+  // --- Guest Notification Methods ---
+
+  async fetchGuestCount() {
+    try {
+      const res = await fetch('/api/guest/count');
+      if (!res.ok) return;
+      const data = await res.json();
+      const countEl = document.getElementById('guest-sub-count');
+      if (countEl) countEl.textContent = `${data.count} guest${data.count !== 1 ? 's' : ''}`;
+    } catch { /* silently fail */ }
+  },
+
+  async notifyGuests(payload) {
+    try {
+      // Also update server status
+      await fetch('/api/guest/update-status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          threatLevel: Simulator.threatLevel,
+          evacuationActive: Simulator.evacuationActive,
+          lockdownActive: Simulator.lockdownActive,
+          allClear: payload.type === 'all-clear',
+          activeIncidents: Simulator.incidents.filter(i => i.status !== 'resolved').length,
+        }),
+      });
+
+      const res = await fetch('/api/guest/notify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      Toast.show('info', 'Guest Alert Sent', `Notified ${data.sent} of ${data.total} guests`);
+    } catch (err) {
+      console.error('Guest notify error:', err);
+    }
+  },
+
+  showQRModal() {
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('modal-content');
+    if (!overlay || !modal) return;
+
+    const host = window.location.origin;
+
+    modal.innerHTML = `
+      <div class="modal-header">
+        <div class="modal-title">Room QR Codes</div>
+        <button class="modal-close" onclick="App.closeModal()">${Icons.x}</button>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label class="form-label">Select Floor</label>
+        <select class="form-select" id="qr-floor-select" onchange="DashboardView.updateQRRoomList()">
+          ${FLOORS.map(f => `<option value="${f}">${f}</option>`).join('')}
+        </select>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label class="form-label">Select Room</label>
+        <select class="form-select" id="qr-room-select" onchange="DashboardView.generateQR()">
+          ${ROOMS[FLOORS[0]].map(r => `<option value="${r}">${r}</option>`).join('')}
+        </select>
+      </div>
+      <div style="text-align: center; padding: 20px 0;">
+        <div id="qr-code-display" style="display: inline-block; padding: 16px; background: white; border-radius: 12px;"></div>
+        <div id="qr-url-display" style="margin-top: 12px; font-family: var(--font-mono); font-size: 0.72rem; color: var(--text-tertiary); word-break: break-all;"></div>
+      </div>
+      <div style="text-align: center;">
+        <button class="btn btn-primary" onclick="DashboardView.printQR()" id="btn-print-qr">
+          Print QR Code
+        </button>
+      </div>
+    `;
+
+    overlay.classList.add('active');
+    this.generateQR();
+  },
+
+  updateQRRoomList() {
+    const floor = document.getElementById('qr-floor-select')?.value;
+    const roomSelect = document.getElementById('qr-room-select');
+    if (!floor || !roomSelect) return;
+
+    roomSelect.innerHTML = (ROOMS[floor] || []).map(r => `<option value="${r}">${r}</option>`).join('');
+    this.generateQR();
+  },
+
+  generateQR() {
+    const floor = document.getElementById('qr-floor-select')?.value || 'Lobby';
+    const room = document.getElementById('qr-room-select')?.value || '101';
+    const host = window.location.origin;
+    const floorParam = floor.replace('Floor ', '');
+    const url = `${host}/guest?room=${room}&floor=${floorParam}`;
+
+    const display = document.getElementById('qr-code-display');
+    const urlDisplay = document.getElementById('qr-url-display');
+    if (!display) return;
+
+    // Generate QR using a simple table-based QR renderer
+    if (typeof qrcode !== 'undefined') {
+      const qr = qrcode(0, 'M');
+      qr.addData(url);
+      qr.make();
+      display.innerHTML = qr.createSvgTag(5, 0);
+    } else {
+      // Fallback: show URL as text with a styled placeholder
+      display.innerHTML = `
+        <div style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; border: 2px dashed #ccc; border-radius: 8px; color: #666; font-size: 0.75rem; text-align: center; padding: 12px;">
+          QR Library Loading...<br><br>
+          <a href="${url}" target="_blank" style="color: #3b82f6; word-break: break-all;">${url}</a>
+        </div>
+      `;
+    }
+
+    if (urlDisplay) urlDisplay.textContent = url;
+  },
+
+  printQR() {
+    const qrDisplay = document.getElementById('qr-code-display');
+    if (!qrDisplay) return;
+
+    const floor = document.getElementById('qr-floor-select')?.value || '';
+    const room = document.getElementById('qr-room-select')?.value || '';
+
+    const printWindow = window.open('', '_blank', 'width=400,height=500');
+    printWindow.document.write(`
+      <html>
+      <head><title>AEGIS QR — Room ${room}</title>
+      <style>
+        body { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: Inter, sans-serif; }
+        h2 { margin-bottom: 8px; }
+        p { color: #666; margin-bottom: 20px; }
+        .qr { padding: 20px; }
+        .footer { margin-top: 20px; font-size: 12px; color: #999; }
+      </style>
+      </head>
+      <body>
+        <h2>Grand Meridian Hotel</h2>
+        <p>${floor} — Room ${room}</p>
+        <div class="qr">${qrDisplay.innerHTML}</div>
+        <p style="font-size: 13px;">Scan for emergency safety alerts</p>
+        <div class="footer">AEGIS Crisis Response System</div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  },
+
+  showGuestAlertModal() {
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('modal-content');
+    if (!overlay || !modal) return;
+
+    modal.innerHTML = `
+      <div class="modal-header">
+        <div class="modal-title">Send Guest Alert</div>
+        <button class="modal-close" onclick="App.closeModal()">${Icons.x}</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Alert Title</label>
+        <input class="form-input" id="alert-title-input" placeholder="e.g. Emergency Evacuation Notice" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <textarea class="form-textarea" id="alert-body-input" rows="3" placeholder="Describe the situation and instructions for guests..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Severity</label>
+        <select class="form-select" id="alert-severity-input">
+          <option value="low">Low — Informational</option>
+          <option value="medium">Medium — Advisory</option>
+          <option value="high" selected>High — Urgent</option>
+          <option value="critical">Critical — Life Safety</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 12px; padding-top: 8px;">
+        <button class="btn btn-ghost" onclick="App.closeModal()" style="flex: 1;">Cancel</button>
+        <button class="btn btn-danger" onclick="DashboardView.sendCustomGuestAlert()" style="flex: 1;" id="btn-send-alert">
+          ${Icons.send} Send Alert
+        </button>
+      </div>
+    `;
+
+    overlay.classList.add('active');
+  },
+
+  async sendCustomGuestAlert() {
+    const title = document.getElementById('alert-title-input')?.value;
+    const body = document.getElementById('alert-body-input')?.value;
+    const severity = document.getElementById('alert-severity-input')?.value;
+
+    if (!title || !body) {
+      Toast.show('warning', 'Missing Fields', 'Please enter a title and message.');
+      return;
+    }
+
+    const btn = document.getElementById('btn-send-alert');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Sending...';
+    }
+
+    await this.notifyGuests({
+      title: `🔔 ${title}`,
+      body: body,
+      severity: severity,
+      type: 'alert',
+      crisisType: title,
+    });
+
+    App.closeModal();
   },
 };

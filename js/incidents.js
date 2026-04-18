@@ -188,6 +188,14 @@ const IncidentView = {
         </div>
       </div>
 
+      <div class="detail-section">
+        <div class="detail-section-title">AI Recommended Response</div>
+        <div class="ai-recommendation" id="ai-recommendation">
+          ${inc.aiDecision ? `<pre>${inc.aiDecision}</pre>` : '<div class="ai-loading">Loading recommendation...</div>'}
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="IncidentView.refreshRecommendation()">Refresh Recommendation</button>
+      </div>
+
       <div class="incident-actions">
         ${inc.status !== 'resolved' ? `
           ${inc.status === 'reported' ? `<button class="btn btn-primary btn-sm" onclick="IncidentView.moveIncident('${inc.id}', 'acknowledged')">Acknowledge</button>` : ''}
@@ -199,6 +207,34 @@ const IncidentView = {
     `;
 
     document.getElementById('incident-detail-overlay').classList.add('active');
+    this.renderAIDecision(inc);
+  },
+
+  renderAIDecision(inc) {
+    const container = document.getElementById('ai-recommendation');
+    if (!container) return;
+
+    container.innerHTML = inc.aiDecision ? `<pre>${inc.aiDecision}</pre>` : '<div class="ai-loading">Loading recommendation...</div>';
+
+    if (!inc.aiDecision && typeof GeminiAI !== 'undefined') {
+      GeminiAI.requestDecision(inc).then(() => {
+        if (this.selectedIncident && this.selectedIncident.id === inc.id) {
+          container.innerHTML = `<pre>${inc.aiDecision}</pre>`;
+        }
+      });
+    }
+  },
+
+  refreshRecommendation() {
+    if (!this.selectedIncident) return;
+    const container = document.getElementById('ai-recommendation');
+    if (container) container.innerHTML = '<div class="ai-loading">Refreshing recommendation...</div>';
+
+    if (typeof GeminiAI !== 'undefined') {
+      GeminiAI.requestDecision(this.selectedIncident).then(() => {
+        if (container) container.innerHTML = `<pre>${this.selectedIncident.aiDecision}</pre>`;
+      });
+    }
   },
 
   closeDetail() {
@@ -315,6 +351,11 @@ const IncidentView = {
     Simulator.incidents.push(incident);
     EventBus.emit('new-incident', incident);
     Toast.show('warning', 'Incident Reported', incident.title);
+
+    if (typeof GeminiAI !== 'undefined') {
+      GeminiAI.requestDecision(incident);
+    }
+
     App.closeModal();
     this.render();
   },

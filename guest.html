@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AEGIS — Guest Safety Portal</title>
+  <meta name="description" content="Grand Meridian Hotel emergency safety portal. Enable notifications for real-time crisis alerts and evacuation guidance.">
+  <meta name="theme-color" content="#060a14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+  <!-- Favicon -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="css/guest.css">
+</head>
+<body>
+  <!-- Ambient background -->
+  <div class="guest-bg" aria-hidden="true"></div>
+
+  <div class="guest-container">
+    <!-- Header -->
+    <header class="guest-header">
+      <div class="guest-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          <path d="M12 8v4" stroke-width="2.5"/>
+          <circle cx="12" cy="16" r="1" fill="white"/>
+        </svg>
+      </div>
+      <div class="guest-brand">AEGIS Safety</div>
+      <div class="guest-hotel-name">Grand Meridian Hotel & Resort</div>
+      <div class="guest-room-info" id="guest-room-display">Room --- · ---</div>
+    </header>
+
+    <!-- Live Status Bar -->
+    <div class="status-bar">
+      <div class="status-dot green" id="status-dot"></div>
+      <span class="status-text green" id="status-text">All Clear — You are safe</span>
+    </div>
+
+    <!-- ====== CRISIS MODE ELEMENTS (hidden until crisis) ====== -->
+
+    <!-- Crisis Banner -->
+    <div class="crisis-banner">
+      <div class="crisis-emoji">🚨</div>
+      <div class="crisis-title" id="crisis-title">EMERGENCY</div>
+      <div class="crisis-type" id="crisis-type">---</div>
+      <div class="crisis-time" id="crisis-time">---</div>
+    </div>
+
+    <!-- Evacuation Directions -->
+    <div class="evac-directions">
+      <div class="evac-header">
+        <div class="evac-header-icon">🏃</div>
+        <div class="evac-header-text">
+          <div class="evac-label">Evacuation Route</div>
+          <div class="evac-sublabel">Follow these steps carefully</div>
+        </div>
+      </div>
+      <div class="evac-steps" id="evac-steps">
+        <!-- Filled dynamically by JS -->
+      </div>
+    </div>
+
+    <!-- DO / DON'T Cards -->
+    <div class="crisis-do-dont">
+      <div class="do-card">
+        <div class="do-card-title">✓ Do</div>
+        <ul>
+          <li>Stay calm</li>
+          <li>Follow exit signs</li>
+          <li>Help others nearby</li>
+          <li>Use stairs only</li>
+        </ul>
+      </div>
+      <div class="dont-card">
+        <div class="dont-card-title">✕ Don't</div>
+        <ul>
+          <li>Use elevators</li>
+          <li>Go back for items</li>
+          <li>Run or push</li>
+          <li>Ignore alarms</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ====== NORMAL MODE ELEMENTS ====== -->
+
+    <!-- Notification Permission Card -->
+    <div class="notif-card" id="notif-card">
+      <!-- Filled dynamically by JS -->
+    </div>
+
+    <!-- Info Cards -->
+    <div class="info-section" id="info-section">
+      <!-- Filled dynamically by JS -->
+    </div>
+
+    <!-- Emergency Contacts -->
+    <div class="emergency-contacts">
+      <div class="emergency-title">Emergency Contacts</div>
+      <div class="emergency-list">
+        <div class="emergency-item">
+          <div class="emergency-item-left">
+            <span class="emergency-item-icon">📞</span>
+            <span class="emergency-item-name">Front Desk</span>
+          </div>
+          <a class="emergency-item-number" href="tel:0">Dial 0</a>
+        </div>
+        <div class="emergency-item">
+          <div class="emergency-item-left">
+            <span class="emergency-item-icon">🚔</span>
+            <span class="emergency-item-name">Emergency</span>
+          </div>
+          <a class="emergency-item-number" href="tel:911">911</a>
+        </div>
+        <div class="emergency-item">
+          <div class="emergency-item-left">
+            <span class="emergency-item-icon">🛡️</span>
+            <span class="emergency-item-name">Hotel Security</span>
+          </div>
+          <a class="emergency-item-number" href="tel:0">Ext. 555</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="guest-footer">
+      <div class="guest-footer-text">AEGIS Crisis Response System · Grand Meridian Hotel</div>
+    </footer>
+  </div>
+
+  <script src="js/guest.js"></script>
+</body>
+</html>

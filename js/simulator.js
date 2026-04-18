@@ -10,6 +10,7 @@ const Simulator = {
   threatLevel: 'green',
   threatScore: 15,
   isRunning: false,
+  autoGenerate: false,
   intervals: [],
   guestCount: 187,
   accountedGuests: 187,
@@ -26,8 +27,10 @@ const Simulator = {
 
   start() {
     this.isRunning = true;
-    // Generate new alerts every 8-15 seconds
-    this.intervals.push(setInterval(() => this.generateRandomAlert(), Utils.random(8000, 15000)));
+    if (this.autoGenerate) {
+      // Generate new alerts every 8-15 seconds
+      this.intervals.push(setInterval(() => this.generateRandomAlert(), Utils.random(8000, 15000)));
+    }
     // Update staff positions every 5 seconds
     this.intervals.push(setInterval(() => this.updateStaffStatus(), 5000));
     // Update threat score every 10 seconds
@@ -41,6 +44,22 @@ const Simulator = {
     this.intervals.forEach(clearInterval);
     this.intervals = [];
   },
+
+  toggleAutoGenerate() {
+    this.autoGenerate = !this.autoGenerate;
+    if (this.isRunning) {
+      this.stop();
+      this.start();
+    }
+    return this.autoGenerate;
+  },
+
+  triggerManualAlert() {
+    if (this.isRunning) {
+      this.generateRandomAlert();
+    }
+  },
+
 
   // --- Staff Generation ---
   generateStaff() {
@@ -261,6 +280,10 @@ const Simulator = {
     this.incidents.push(incident);
     EventBus.emit('new-incident', incident);
     Toast.show('warning', 'New Incident', `${alert.title} — ${alert.location}`);
+
+    if (typeof GeminiAI !== 'undefined') {
+      GeminiAI.requestDecision(incident);
+    }
   },
 
   // --- Staff Status Updates ---
