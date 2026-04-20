@@ -13,11 +13,32 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="css/guest.css">
+  <link rel="stylesheet" href="/css/guest.css">
 </head>
 <body>
-  <!-- Ambient background -->
   <div class="guest-bg" aria-hidden="true"></div>
+
+  <!-- Check-in Identity Overlay -->
+  <div id="checkin-overlay" class="checkin-overlay">
+    <div class="checkin-card">
+      <div class="checkin-header">
+        <div class="checkin-icon">🗝️</div>
+        <h1>Guest Check-In</h1>
+        <p>Enter your room number to activate your emergency safety portal and SMS alerts.</p>
+      </div>
+      <div class="checkin-body">
+        <div class="input-group">
+          <label for="room-input">Room Number</label>
+          <input type="text" id="room-input" placeholder="e.g. 101" autofocus>
+          <div id="checkin-error" class="error-msg"></div>
+        </div>
+        <button id="verify-btn" class="verify-btn">Verify Identity</button>
+      </div>
+      <div class="checkin-footer">
+        <p>Secure check-in verified by AEGIS Identity</p>
+      </div>
+    </div>
+  </div>
 
   <div class="guest-container">
     <!-- Header -->
@@ -132,6 +153,6 @@
     </footer>
   </div>
 
-  <script src="js/guest.js"></script>
+  <script src="/js/guest.js"></script>
 </body>
 </html>

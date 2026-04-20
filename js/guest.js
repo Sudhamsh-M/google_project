@@ -12,27 +12,137 @@ const GuestApp = {
   swRegistration: null,
 
   async init() {
-    this.parseParams();
-    this.renderRoomInfo();
-    this.renderNotifCard();
-    this.renderInfoCards();
-    await this.registerServiceWorker();
-    this.startStatusPolling();
-    this.listenForServiceWorkerMessages();
-    console.log('%c AEGIS GUEST %c Safety System Active ', 'background: #3b82f6; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px 0 0 4px;', 'background: #0f1526; color: #94a3b8; padding: 4px 8px; border-radius: 0 4px 4px 0;');
+    this.setupListeners();
+    
+    // 1. Get URL parameters
+    const params = new URLSearchParams(window.location.search);
+    const magicRoom = params.get('magic_room');
+
+    // 0. Force logout if parameter exists (for testing)
+    if (params.get('logout')) {
+      localStorage.removeItem('aegis_room');
+      console.log('[AEGIS] Session cleared via logout parameter');
+    }
+
+    if (magicRoom) {
+      const autoIdentified = await this.handleAutoCheckIn(magicRoom);
+      if (autoIdentified) {
+        this.finishLogin();
+        return;
+      }
+    }
+
+    // 2. Fallback to existing session or manual check-in
+    const identified = await this.checkIdentity();
+    if (identified) {
+      this.finishLogin();
+    }
   },
 
-  // --- Parse URL parameters ---
-  parseParams() {
-    const params = new URLSearchParams(window.location.search);
-    this.room = params.get('room') || '---';
-    this.floor = params.get('floor') || 'Lobby';
-
-    // Map numeric floor to label
-    const floorNum = parseInt(this.floor);
-    if (!isNaN(floorNum) && floorNum > 0) {
-      this.floor = `Floor ${floorNum}`;
+  async handleAutoCheckIn(roomNum) {
+    try {
+      const res = await fetch('/api/guest/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomNumber: roomNum })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('aegis_room', data.room);
+        this.room = data.room;
+        this.floor = `Floor ${data.floor}`;
+        console.log(`[MAGIC] Zero-Touch identity verified: Room ${this.room}`);
+        return true;
+      }
+    } catch (e) {
+      console.error('[MAGIC] Auto-verification bridge failed');
     }
+    return false;
+  },
+
+  setupListeners() {
+    document.getElementById('verify-btn')?.addEventListener('click', () => this.handleCheckIn());
+    document.getElementById('room-input')?.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') this.handleCheckIn();
+    });
+  },
+
+  async checkIdentity() {
+    const storedRoom = localStorage.getItem('aegis_room');
+    if (storedRoom) {
+      try {
+        const res = await fetch('/api/guest/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomNumber: storedRoom })
+        });
+        const data = await res.json();
+        if (data.success) {
+          this.room = data.room;
+          this.floor = `Floor ${data.floor}`;
+          return true;
+        }
+      } catch (e) {
+        console.warn('Identity verification failed, forcing re-check-in');
+      }
+    }
+    return false;
+  },
+
+  async handleCheckIn() {
+    const roomInput = document.getElementById('room-input');
+    const verifyBtn = document.getElementById('verify-btn');
+    const errorEl = document.getElementById('checkin-error');
+    
+    const roomNum = roomInput.value.trim();
+    if (!roomNum) return;
+
+    verifyBtn.disabled = true;
+    verifyBtn.textContent = 'Verifying...';
+    errorEl.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/guest/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roomNumber: roomNum })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        localStorage.setItem('aegis_room', data.room);
+        this.room = data.room;
+        this.floor = `Floor ${data.floor}`;
+        
+        // Premium hide animation
+        document.getElementById('checkin-overlay').classList.add('hidden');
+        setTimeout(() => {
+          document.getElementById('checkin-overlay').style.display = 'none';
+          this.finishLogin();
+        }, 500);
+      } else {
+        errorEl.textContent = 'Invalid room number. Please check with reception.';
+        errorEl.style.display = 'block';
+        verifyBtn.disabled = false;
+        verifyBtn.textContent = 'Verify Identity';
+      }
+    } catch (e) {
+      errorEl.textContent = 'Connection error. Please try again.';
+      errorEl.style.display = 'block';
+      verifyBtn.disabled = false;
+      verifyBtn.textContent = 'Verify Identity';
+    }
+  },
+
+  async finishLogin() {
+    document.getElementById('checkin-overlay').style.display = 'none';
+    this.renderRoomInfo();
+    await this.registerServiceWorker();
+    this.renderNotifCard();
+    this.renderInfoCards();
+    this.startStatusPolling();
+    this.listenForServiceWorkerMessages();
+    console.log('%c AEGIS GUEST %c Session Active ', 'background: #3b82f6; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px 0 0 4px;', 'background: #0f1526; color: #94a3b8; padding: 4px 8px; border-radius: 0 4px 4px 0;');
   },
 
   // --- Render room info in header ---

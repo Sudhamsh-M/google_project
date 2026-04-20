@@ -3,7 +3,7 @@
    ============================================ */
 
 const GeminiAI = {
-  endpoint: 'http://localhost:3000/api/decision',
+  endpoint: 'http://localhost:8000/api/decision',
   async requestDecision(incident) {
     if (!incident) return null;
 

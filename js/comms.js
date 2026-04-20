@@ -102,6 +102,16 @@ const CommsView = {
               </button>
             </div>
 
+            <!-- Magic Link Simulator -->
+            <div class="broadcast-section">
+              <div class="broadcast-section-title">Guest Onboarding (Beta)</div>
+              <p class="text-xs text-tertiary mb-sm">Generate Zero-Touch links for emergency access testing.</p>
+              <div class="flex gap-xs">
+                <input type="text" id="magic-link-room" class="input-sm w-full" placeholder="Room #" value="101" style="background: var(--bg-deep); border: 1px solid var(--border-subtle); color: var(--text-primary); padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;">
+                <button class="btn btn-primary btn-sm" onclick="CommsView.sendMagicLink()" style="white-space: nowrap;">Send Link</button>
+              </div>
+            </div>
+
             <!-- Active Responders -->
             <div class="broadcast-section">
               <div class="broadcast-section-title">Active Responders</div>
@@ -281,5 +291,63 @@ const CommsView = {
         }
       }
     });
+  },
+
+  async sendMagicLink() {
+    const roomInput = document.getElementById('magic-link-room');
+    const room = roomInput.value.trim();
+    if (!room) return;
+
+    const btn = event.target;
+    const originalText = btn.innerText;
+    btn.innerText = 'Sending...';
+    btn.disabled = true;
+
+    try {
+      const response = await fetch('/api/guest/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room })
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        Toast.show('success', 'SMS Sent', `Magic Link delivered to Room ${room}`);
+        
+        // Add log to emergency channel
+        const msg = {
+          id: `m-${Utils.shortId()}`,
+          sender: 'AEGIS System',
+          role: 'System',
+          initials: 'SY',
+          color: '#3b82f6',
+          text: `Provisioning Complete: Room ${room} identity verified. SMS dispatched via Twilio.`,
+          time: new Date().toISOString(),
+          priority: 'routine',
+        };
+        
+        if (!Simulator.messages['ch-emergency']) Simulator.messages['ch-emergency'] = [];
+        Simulator.messages['ch-emergency'].push(msg);
+        
+        if (this.activeChannel === 'ch-emergency') {
+          this.renderMessageList();
+          this.scrollToBottom();
+        }
+      } else {
+        // Fallback or Error
+        if (result.simulatedUrl) {
+          Toast.show('warning', 'Simulated Link', 'Twilio is not configured. Link generated locally.');
+          console.log('[AEGIS SIMULATED LINK]', result.simulatedUrl);
+        } else {
+          Toast.show('error', 'Failed', result.error || 'Could not send SMS');
+        }
+      }
+    } catch (err) {
+      Toast.show('error', 'Network Error', 'Check server connection');
+    } finally {
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
   }
 };

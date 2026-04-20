@@ -3,6 +3,7 @@ const fs = require('fs').promises;
 const path = require('path');
 const { URL } = require('url');
 const webpush = require('web-push');
+const twilio = require('twilio');
 
 const rootDir = path.resolve(__dirname);
 const port = process.env.PORT || 8000;
@@ -11,7 +12,15 @@ let GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 // --- Guest Push Notification State ---
-const guestSubscriptions = []; // { subscription, room, floor, subscribedAt }
+const guestSubscriptions = []; // { subscription, room, floor, phone, subscribedAt }
+
+// --- Mock Guest Database ---
+const GUEST_DATABASE = {
+  '101': { name: 'Manoj Routhu', floor: 1, phone: '+918712565008' },
+  '305': { name: 'Vamsi Krishna', floor: 3, phone: '+918712565008' },
+  '512': { name: 'Sai Teja', floor: 5, phone: '+918712565008' }
+};
+
 let serverThreatLevel = 'green';
 let serverEvacuationActive = false;
 let serverLockdownActive = false;
@@ -27,6 +36,9 @@ async function loadDotEnv() {
   try {
     const envText = await fs.readFile(envPath, 'utf8');
     envText.split(/\r?\n/).forEach((line) => {
+      // Ignore comments and empty lines
+      if (line.trim().startsWith('#') || !line.includes('=')) return;
+
       const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
       if (match) {
         const key = match[1];
@@ -34,9 +46,7 @@ async function loadDotEnv() {
         if (value.startsWith('"') && value.endsWith('"')) {
           value = value.slice(1, -1);
         }
-        if (!process.env[key]) {
-          process.env[key] = value;
-        }
+        process.env[key] = value;
       }
     });
     GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -79,7 +89,26 @@ async function setupVapidKeys() {
     VAPID_PRIVATE_KEY
   );
 
-  console.log('[VAPID] Push notification keys configured');
+  console.log('[PUSH] VAPID keys configured');
+}
+
+// --- Twilio Setup ---
+let twilioClient = null;
+function setupTwilio() {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const phone = process.env.TWILIO_PHONE_NUMBER;
+
+  if (sid && token && phone) {
+    try {
+      twilioClient = twilio(sid, token);
+      console.log('[SMS] Twilio service enabled');
+    } catch (err) {
+      console.error('[SMS] Twilio init error:', err.message);
+    }
+  } else {
+    console.warn('[SMS] Twilio credentials missing in .env — SMS alerts disabled');
+  }
 }
 
 const mimeTypes = {
@@ -181,7 +210,7 @@ async function handleDecisionRequest(req, res) {
   }
 
   const prompt = buildPrompt(incident);
-  
+
   // CORRECT API ENDPOINT FOR 2026
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
@@ -204,10 +233,10 @@ async function handleDecisionRequest(req, res) {
     });
 
     const apiData = await apiRes.json();
-    
+
     // SAFE PARSING OF GEMINI RESPONSE
-    const decision = apiData?.candidates?.[0]?.content?.parts?.[0]?.text 
-                  || "Warning: System unable to generate a response. Follow standard emergency protocols.";
+    const decision = apiData?.candidates?.[0]?.content?.parts?.[0]?.text
+      || "Warning: System unable to generate a response. Follow standard emergency protocols.";
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ decision }));
@@ -215,6 +244,41 @@ async function handleDecisionRequest(req, res) {
     console.error("Gemini API Error:", error);
     res.writeHead(502, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: "Failed to connect to AI Analysis service." }));
+  }
+}
+
+// --- Guest Identity & Verification ---
+
+async function handleGuestVerify(req, res) {
+  const body = await readRequestBody(req);
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid JSON' }));
+    return;
+  }
+
+  const { roomNumber } = payload;
+  if (!roomNumber) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Room number required' }));
+    return;
+  }
+
+  const guest = GUEST_DATABASE[roomNumber];
+  if (guest) {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: true,
+      room: roomNumber,
+      floor: guest.floor,
+      name: guest.name
+    }));
+  } else {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: false, error: 'Room not found in guest database' }));
   }
 }
 
@@ -243,6 +307,12 @@ async function handleGuestSubscribe(req, res) {
     return;
   }
 
+  // Auto-link phone number if room is verified
+  let phone = null;
+  if (room && GUEST_DATABASE[room]) {
+    phone = GUEST_DATABASE[room].phone;
+  }
+
   // Remove existing subscription for same endpoint (re-subscribe)
   const existingIdx = guestSubscriptions.findIndex(s => s.subscription.endpoint === subscription.endpoint);
   if (existingIdx >= 0) guestSubscriptions.splice(existingIdx, 1);
@@ -251,10 +321,11 @@ async function handleGuestSubscribe(req, res) {
     subscription,
     room: room || 'unknown',
     floor: floor || 'unknown',
+    phone,
     subscribedAt: new Date().toISOString(),
   });
 
-  console.log(`[GUEST] New subscription: Room ${room}, ${floor} (Total: ${guestSubscriptions.length})`);
+  console.log(`[GUEST] New subscription: Room ${room} (SMS Linked: ${phone ? 'YES' : 'NO'})`);
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ success: true, total: guestSubscriptions.length }));
 }
@@ -292,6 +363,55 @@ function handleGuestStatus(req, res) {
 function handleGuestCount(req, res) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ count: guestSubscriptions.length }));
+}
+
+async function handleGuestMagicLink(req, res) {
+  const body = await readRequestBody(req);
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid JSON' }));
+    return;
+  }
+
+  const { room } = payload;
+  const guest = GUEST_DATABASE[room];
+
+  if (!guest || !guest.phone) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Guest or phone number not found for this room' }));
+    return;
+  }
+
+  const host = req.headers.host;
+  const protocol = req.headers['x-forwarded-proto'] || 'http';
+  const magicUrl = `${protocol}://${host}/guest?magic_room=${room}`;
+
+  if (twilioClient) {
+    try {
+      await twilioClient.messages.create({
+        body: `Welcome to AEGIS Safety at Grand Meridian. Your Zero-Touch Emergency Portal is ready: ${magicUrl}`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: guest.phone
+      });
+      console.log(`[SMS] Magic Link sent to Room ${room} (${guest.phone})`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Magic link SMS sent' }));
+    } catch (err) {
+      console.error('[SMS] Magic Link error:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Twilio failed to send SMS' }));
+    }
+  } else {
+    res.writeHead(503, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: false,
+      error: 'Twilio not configured',
+      simulatedUrl: magicUrl
+    }));
+  }
 }
 
 async function handleGuestNotify(req, res) {
@@ -341,8 +461,24 @@ async function handleGuestNotify(req, res) {
 
   const sendPromises = targets.map(async (guest) => {
     try {
+      // 1. Send Push Notification
       await webpush.sendNotification(guest.subscription, notifPayload);
       sent++;
+
+      // 2. Send SMS via Twilio if phone is linked
+      if (twilioClient && guest.phone) {
+        // Construct Magic Link for the SMS
+        const host = req.headers.host;
+        const protocol = req.headers['x-forwarded-proto'] || 'http';
+        const magicUrl = `${protocol}://${host}/guest?magic_room=${guest.room}`;
+
+        await twilioClient.messages.create({
+          body: `🚨 EMERGENCY ALERT: ${title}\n${notifBody}\n\nINSTANT SAFETY PORTAL: ${magicUrl}`,
+          from: process.env.TWILIO_PHONE_NUMBER,
+          to: guest.phone
+        });
+        console.log(`[SMS] Alert + Magic Link delivered to Room ${guest.room} (${guest.phone})`);
+      }
     } catch (err) {
       failed++;
       // Remove invalid subscriptions (410 Gone or 404)
@@ -444,23 +580,39 @@ async function handleUpdateStatus(req, res) {
 }
 
 async function serveStatic(req, res, pathname) {
-  let filePath = path.join(rootDir, pathname);
-  if (pathname === '/' || pathname === '') {
-    filePath = path.join(rootDir, 'index.html');
+  // Normalize pathname to remove potential directory traversal or leading slashes issues
+  let normalizedPath = pathname;
+  if (normalizedPath === '/' || normalizedPath === '') {
+    normalizedPath = '/index.html';
   }
-  // Serve guest page
-  if (pathname === '/guest' || pathname === '/guest/') {
-    filePath = path.join(rootDir, 'guest.html');
+  if (normalizedPath === '/guest' || normalizedPath === '/guest/') {
+    normalizedPath = '/guest.html';
   }
+
+  // Ensure path is relative to rootDir
+  const relativePath = normalizedPath.startsWith('/') ? normalizedPath.slice(1) : normalizedPath;
+  const filePath = path.join(rootDir, relativePath);
 
   try {
     const data = await fs.readFile(filePath);
-    const ext = path.extname(filePath) || '.html';
-    res.writeHead(200, { 'Content-Type': mimeTypes[ext] || 'application/octet-stream' });
+    const ext = path.extname(filePath).toLowerCase() || '.html';
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    // Set charset for text types
+    const headerContentType = (contentType.startsWith('text/') || contentType === 'application/javascript')
+      ? `${contentType}; charset=utf-8`
+      : contentType;
+
+    res.writeHead(200, {
+      'Content-Type': headerContentType,
+      'X-Content-Type-Options': 'nosniff' // Prevent MIME type sniffing issues
+    });
     res.end(data);
-  } catch {
+    console.log(`[GET] 200 - ${normalizedPath} (${headerContentType})`);
+  } catch (err) {
     res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('File not found');
+    console.error(`[GET] 404 - ${normalizedPath} (Resolved: ${filePath})`);
   }
 }
 
@@ -492,6 +644,9 @@ async function requestListener(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/guest/subscribe') {
     return handleGuestSubscribe(req, res);
   }
+  if (req.method === 'POST' && url.pathname === '/api/guest/verify') {
+    return handleGuestVerify(req, res);
+  }
   if (req.method === 'POST' && url.pathname === '/api/guest/unsubscribe') {
     return handleGuestUnsubscribe(req, res);
   }
@@ -500,6 +655,9 @@ async function requestListener(req, res) {
   }
   if (req.method === 'GET' && url.pathname === '/api/guest/count') {
     return handleGuestCount(req, res);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/guest/magic-link') {
+    return handleGuestMagicLink(req, res);
   }
   if (req.method === 'POST' && url.pathname === '/api/guest/notify') {
     return handleGuestNotify(req, res);
@@ -524,6 +682,7 @@ async function requestListener(req, res) {
 
 loadDotEnv().then(async () => {
   await setupVapidKeys();
+  setupTwilio();
 
   const server = http.createServer(requestListener);
   server.listen(port, () => {
