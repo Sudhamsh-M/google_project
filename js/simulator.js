@@ -17,11 +17,25 @@ const Simulator = {
   evacuationActive: false,
   lockdownActive: false,
 
-  init() {
+  async init() {
     this.generateStaff();
     this.generateInitialIncidents();
     this.generateChannels();
     this.generateInitialMessages();
+
+    // Sync initial state from the server/Firebase
+    try {
+      const res = await fetch('/api/guest/status');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.threatLevel) this.threatLevel = data.threatLevel;
+        if (data.evacuationActive) this.evacuationActive = data.evacuationActive;
+        if (data.lockdownActive) this.lockdownActive = data.lockdownActive;
+        if (data.threatLevel === 'red') this.threatScore = 85;
+        else if (data.threatLevel === 'amber') this.threatScore = 50;
+      }
+    } catch (e) { console.warn('Could not sync initial status'); }
+
     this.start();
   },
 

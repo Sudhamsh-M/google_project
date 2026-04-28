@@ -4,6 +4,7 @@ const path = require('path');
 const { URL } = require('url');
 const webpush = require('web-push');
 const twilio = require('twilio');
+const admin = require('firebase-admin');
 
 const rootDir = path.resolve(__dirname);
 const port = process.env.PORT || 8000;
@@ -13,13 +14,6 @@ const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
 // --- Guest Push Notification State ---
 const guestSubscriptions = []; // { subscription, room, floor, phone, subscribedAt }
-
-// --- Mock Guest Database ---
-const GUEST_DATABASE = {
-  '101': { name: 'Manoj Routhu', floor: 1, phone: '+918712565008' },
-  '305': { name: 'Vamsi Krishna', floor: 3, phone: '+918712565008' },
-  '512': { name: 'Sai Teja', floor: 5, phone: '+918712565008' }
-};
 
 let serverThreatLevel = 'green';
 let serverEvacuationActive = false;
@@ -35,14 +29,32 @@ async function loadDotEnv() {
   const envPath = path.join(rootDir, '.env');
   try {
     const envText = await fs.readFile(envPath, 'utf8');
+    let currentKey = null;
+    let currentValue = '';
+
     envText.split(/\r?\n/).forEach((line) => {
-      // Ignore comments and empty lines
+      if (currentKey) {
+        currentValue += '\n' + line;
+        if (line.endsWith('"')) {
+          process.env[currentKey] = currentValue.slice(0, -1);
+          currentKey = null;
+        }
+        return;
+      }
+
       if (line.trim().startsWith('#') || !line.includes('=')) return;
 
       const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
       if (match) {
         const key = match[1];
         let value = match[2].trim();
+
+        if (value.startsWith('"') && !value.endsWith('"')) {
+          currentKey = key;
+          currentValue = value.slice(1);
+          return;
+        }
+
         if (value.startsWith('"') && value.endsWith('"')) {
           value = value.slice(1, -1);
         }
@@ -108,6 +120,60 @@ function setupTwilio() {
     }
   } else {
     console.warn('[SMS] Twilio credentials missing in .env — SMS alerts disabled');
+  }
+}
+
+// --- Firebase Setup ---
+let db = null;
+function setupFirebase() {
+  try {
+    const projectId = process.env.FIREBASE_PROJECT_ID;
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    
+    if (privateKey) {
+      // Fix accidental extra quotes and correctly format newlines
+      privateKey = privateKey.replace(/^"|"$/g, '').replace(/\\n/g, '\n');
+    }
+    
+    if (projectId && clientEmail && privateKey) {
+      admin.initializeApp({
+        credential: admin.credential.cert({ projectId, clientEmail, privateKey })
+      });
+      db = admin.firestore();
+      console.log('[DB] Firebase Firestore connected');
+
+      // Load initial system status from DB
+      db.collection('system').doc('status').get().then(doc => {
+        if (doc.exists) {
+          const data = doc.data();
+          serverThreatLevel = data.threatLevel || 'green';
+          serverEvacuationActive = data.evacuationActive || false;
+          serverLockdownActive = data.lockdownActive || false;
+          serverAllClear = data.allClear || false;
+          console.log(`[DB] Restored system status: ${serverThreatLevel.toUpperCase()}`);
+        } else {
+          // Initialize default state if document is missing
+          db.collection('system').doc('status').set({
+            threatLevel: 'green', evacuationActive: false, lockdownActive: false, allClear: false
+          }).catch(() => {});
+        }
+      }).catch(err => {
+        if (err.message.includes('NOT_FOUND')) {
+          console.log('[DB] Initializing new system status (first run)');
+          db.collection('system').doc('status').set({ threatLevel: 'green', evacuationActive: false, lockdownActive: false, allClear: false }).catch(() => {});
+        } else {
+          console.error('[DB] Failed to load system status', err.message);
+        }
+      });
+    } else {
+      console.warn('[DB] Firebase setup skipped. Missing credentials in .env:');
+      if (!projectId) console.warn('  -> FIREBASE_PROJECT_ID is missing');
+      if (!clientEmail) console.warn('  -> FIREBASE_CLIENT_EMAIL is missing');
+      if (!privateKey) console.warn('  -> FIREBASE_PRIVATE_KEY is missing');
+    }
+  } catch (err) {
+    console.error('[DB] Firebase init error:', err.message);
   }
 }
 
@@ -267,12 +333,18 @@ async function handleGuestVerify(req, res) {
     return;
   }
 
-  const guest = GUEST_DATABASE[roomNumber];
+  if (!db) {
+    return res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Database not configured' }));
+  }
+
+  const doc = await db.collection('guests').doc(String(roomNumber)).get();
+  const guest = doc.exists ? doc.data() : null;
+
   if (guest) {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
-      room: roomNumber,
+      room: guest.room,
       floor: guest.floor,
       name: guest.name
     }));
@@ -309,8 +381,11 @@ async function handleGuestSubscribe(req, res) {
 
   // Auto-link phone number if room is verified
   let phone = null;
-  if (room && GUEST_DATABASE[room]) {
-    phone = GUEST_DATABASE[room].phone;
+  if (room && db) {
+    const doc = await db.collection('guests').doc(String(room)).get();
+    if (doc.exists && doc.data().phone) {
+      phone = doc.data().phone;
+    }
   }
 
   // Remove existing subscription for same endpoint (re-subscribe)
@@ -360,12 +435,22 @@ function handleGuestStatus(req, res) {
   }));
 }
 
-function handleGuestCount(req, res) {
+async function handleGuestCount(req, res) {
+  let count = 0;
+  if (db) {
+    try {
+      const snapshot = await db.collection('guests').count().get();
+      count = snapshot.data().count || 0;
+    } catch (err) {
+      console.log('[DB] Guest collection empty or not found. Defaulting count to 0.');
+    }
+  }
+
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ 
     subscriptions: guestSubscriptions.length,
-    database: Object.keys(GUEST_DATABASE).length,
-    count: Object.keys(GUEST_DATABASE).length // Use the database registry as the source of truth
+    database: count,
+    count: count
   }));
 }
 
@@ -381,7 +466,13 @@ async function handleGuestMagicLink(req, res) {
   }
 
   const { room } = payload;
-  const guest = GUEST_DATABASE[room];
+  
+  if (!db) {
+    return res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Database not configured' }));
+  }
+
+  const doc = await db.collection('guests').doc(String(room)).get();
+  const guest = doc.exists ? doc.data() : null;
 
   if (!guest || !guest.phone) {
     res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -436,7 +527,6 @@ async function handleGuestAdd(req, res) {
     return;
   }
 
-  // Update mock database
   // Normalize floor: "Floor 1" -> 1
   let normalizedFloor = floor;
   if (typeof floor === 'string' && floor.startsWith('Floor ')) {
@@ -445,11 +535,23 @@ async function handleGuestAdd(req, res) {
     normalizedFloor = 0;
   }
 
-  GUEST_DATABASE[room] = {
-    name,
-    floor: normalizedFloor,
+  if (!db) {
+    return res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'Database not configured' }));
+  }
+
+  const newGuest = {
+    room: String(room),
+    name: String(name),
+    floor: normalizedFloor !== undefined ? normalizedFloor : 'Unknown',
     phone: phone || null
   };
+
+  try {
+    await db.collection('guests').doc(String(room)).set(newGuest, { merge: true });
+  } catch (err) {
+    console.error('[DB] Guest insert error:', err);
+    return res.writeHead(500, { 'Content-Type': 'application/json' }).end(JSON.stringify({ error: 'DB Error: ' + err.message }));
+  }
 
   console.log(`[GUEST] Manually added guest: ${name} to Room ${room}`);
 
@@ -474,7 +576,7 @@ async function handleGuestAdd(req, res) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({
     success: true,
-    guest: GUEST_DATABASE[room],
+    guest: newGuest,
     smsSent
   }));
 }
@@ -504,6 +606,21 @@ async function handleGuestNotify(req, res) {
     serverLockdownActive = false;
     serverAllClear = true;
     serverThreatLevel = 'green';
+  }
+
+  // Sync status changes to Firebase
+  if (db) {
+    try {
+      await db.collection('system').doc('status').set({
+        threatLevel: serverThreatLevel,
+        evacuationActive: serverEvacuationActive,
+        lockdownActive: serverLockdownActive,
+        allClear: serverAllClear,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (err) {
+      console.error('[DB] Failed to sync system status:', err.message);
+    }
   }
 
   const notifPayload = JSON.stringify({
@@ -547,24 +664,25 @@ async function handleGuestNotify(req, res) {
   let sentSms = 0;
   let smsPromises = [];
 
-  if (twilioClient) {
-    const allRooms = Object.keys(GUEST_DATABASE);
-    const smsTargets = allRooms.filter(room => {
-      const guest = GUEST_DATABASE[room];
-      if (!guest.phone) return false;
+  if (twilioClient && db) {
+    const snapshot = await db.collection('guests').get();
+    let smsTargets = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      if (data.phone) smsTargets.push(data);
+    });
 
-      // Filter by floor if requested
-      if (floors && Array.isArray(floors) && floors.length > 0) {
+    if (floors && Array.isArray(floors) && floors.length > 0) {
+      smsTargets = smsTargets.filter(guest => {
         return floors.some(f => {
           const targetFloor = typeof f === 'string' ? f.replace('Floor ', '') : f;
           return String(guest.floor) === String(targetFloor);
         });
-      }
-      return true;
-    });
+      });
+    }
 
-    smsPromises = smsTargets.map(async (room) => {
-      const guest = GUEST_DATABASE[room];
+    smsPromises = smsTargets.map(async (guest) => {
+      const room = guest.room;
       try {
         const host = req.headers.host;
         const protocol = req.headers['x-forwarded-proto'] || 'http';
@@ -673,6 +791,22 @@ async function handleUpdateStatus(req, res) {
   if (payload.allClear !== undefined) serverAllClear = payload.allClear;
   if (payload.activeIncidents !== undefined) serverActiveIncidents = payload.activeIncidents;
 
+  // Sync to Firebase
+  if (db) {
+    try {
+      await db.collection('system').doc('status').set({
+        threatLevel: serverThreatLevel,
+        evacuationActive: serverEvacuationActive,
+        lockdownActive: serverLockdownActive,
+        allClear: serverAllClear,
+        activeIncidents: serverActiveIncidents,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      }, { merge: true });
+    } catch (err) {
+      console.error('[DB] Failed to sync system status:', err.message);
+    }
+  }
+
   res.writeHead(200, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ success: true }));
 }
@@ -757,9 +891,16 @@ async function requestListener(req, res) {
     return handleGuestCount(req, res);
   }
   if (req.method === 'GET' && url.pathname === '/api/guest/list') {
+    let guestsObj = {};
+    if (db) {
+      const snapshot = await db.collection('guests').get();
+      snapshot.forEach(doc => {
+        guestsObj[doc.id] = doc.data();
+      });
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ 
-      guests: GUEST_DATABASE,
+      guests: guestsObj,
       subscriptions: guestSubscriptions.map(s => ({ room: s.room, subscribedAt: s.subscribedAt }))
     }));
     return;
@@ -770,18 +911,21 @@ async function requestListener(req, res) {
   if (req.method === 'POST' && url.pathname === '/api/guest/remove') {
     const body = await readRequestBody(req);
     const { room } = JSON.parse(body);
-    if (room && GUEST_DATABASE[room]) {
-      delete GUEST_DATABASE[room];
-      // Also remove any active subscriptions for this room
-      const idx = guestSubscriptions.findIndex(s => String(s.room) === String(room));
-      if (idx >= 0) guestSubscriptions.splice(idx, 1);
-      
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Room not found' }));
+    
+    if (room && db) {
+      try {
+        await db.collection('guests').doc(String(room)).delete();
+        // Also remove any active subscriptions for this room
+        const idx = guestSubscriptions.findIndex(s => String(s.room) === String(room));
+        if (idx >= 0) guestSubscriptions.splice(idx, 1);
+        
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true }));
+      } catch (err) { /* fallback below */ }
     }
+    
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Room not found or delete failed' }));
     return;
   }
   if (req.method === 'POST' && url.pathname === '/api/guest/magic-link') {
@@ -809,6 +953,7 @@ async function requestListener(req, res) {
 }
 
 loadDotEnv().then(async () => {
+  setupFirebase();
   await setupVapidKeys();
   setupTwilio();
 
