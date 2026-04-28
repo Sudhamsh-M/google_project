@@ -50,7 +50,7 @@ const GuestApp = {
       if (data.success) {
         localStorage.setItem('aegis_room', data.room);
         this.room = data.room;
-        this.floor = `Floor ${data.floor}`;
+        this.floor = this.formatFloor(data.floor);
         console.log(`[MAGIC] Zero-Touch identity verified: Room ${this.room}`);
         return true;
       }
@@ -79,7 +79,7 @@ const GuestApp = {
         const data = await res.json();
         if (data.success) {
           this.room = data.room;
-          this.floor = `Floor ${data.floor}`;
+          this.floor = this.formatFloor(data.floor);
           return true;
         }
       } catch (e) {
@@ -112,7 +112,7 @@ const GuestApp = {
       if (data.success) {
         localStorage.setItem('aegis_room', data.room);
         this.room = data.room;
-        this.floor = `Floor ${data.floor}`;
+        this.floor = this.formatFloor(data.floor);
         
         // Premium hide animation
         document.getElementById('checkin-overlay').classList.add('hidden');
@@ -216,8 +216,8 @@ const GuestApp = {
       <div class="notif-title">Enable Safety Alerts</div>
       <div class="notif-desc">Allow notifications so we can alert you instantly during an emergency. This could save your life in a crisis situation.</div>
       <button class="notif-btn enable" id="btn-enable-notif">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-        Enable Emergency Alerts
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <span>Enable Emergency Alerts</span>
       </button>
     `;
 
@@ -257,12 +257,9 @@ const GuestApp = {
       <div class="notif-icon">✅</div>
       <div class="notif-title">Safety Alerts Enabled</div>
       <div class="notif-desc">You will receive instant notifications during any emergency. Stay safe — we've got you covered.</div>
-      <button class="notif-btn success" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-        Alerts Active
-      </button>
     `;
   },
+
 
   showNotifDenied(card) {
     card.classList.add('denied');
@@ -290,13 +287,33 @@ const GuestApp = {
       // Convert VAPID key to Uint8Array
       const applicationServerKey = this.urlBase64ToUint8Array(publicKey);
 
-      // Subscribe to push
-      this.pushSubscription = await this.swRegistration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: applicationServerKey,
-      });
+      // 1. Check for existing subscription
+      let subscription = await this.swRegistration.pushManager.getSubscription();
+      
+      // 2. If subscription exists but has different key, unsubscribe first
+      if (subscription && subscription.options.applicationServerKey) {
+        const existingKey = new Uint8Array(subscription.options.applicationServerKey);
+        const keysMatch = existingKey.every((v, i) => v === applicationServerKey[i]);
+        
+        if (!keysMatch) {
+          console.log('[PUSH] Key mismatch detected, unsubscribing old subscription...');
+          await subscription.unsubscribe();
+          subscription = null;
+        }
+      }
 
-      // Send subscription to server
+      // 3. Subscribe if no active subscription
+      if (!subscription) {
+        console.log('[PUSH] Registering new subscription...');
+        subscription = await this.swRegistration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: applicationServerKey,
+        });
+      }
+
+      this.pushSubscription = subscription;
+
+      // 4. Send subscription to server
       await fetch('/api/guest/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -309,8 +326,16 @@ const GuestApp = {
 
       console.log('Push subscription successful');
     } catch (err) {
+      if (err.name === 'InvalidStateError') {
+        console.warn('[PUSH] Subscription state invalid, attempting clean reset...');
+        const sub = await this.swRegistration.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+        // Retry once
+        return this.subscribeToPush();
+      }
       console.error('Push subscription failed:', err);
     }
+
   },
 
 
@@ -509,6 +534,12 @@ const GuestApp = {
         </div>
       </div>
     `;
+  },
+
+  formatFloor(floor) {
+    if (floor === 0 || floor === '0' || floor === 'Lobby') return 'Lobby';
+    if (typeof floor === 'string' && floor.startsWith('Floor ')) return floor;
+    return `Floor ${floor}`;
   },
 
   getNearestExit() {

@@ -10,10 +10,10 @@ const Simulator = {
   threatLevel: 'green',
   threatScore: 15,
   isRunning: false,
-  autoGenerate: false,
+  autoGenerate: false, // Disabled by default for manual control
   intervals: [],
-  guestCount: 187,
-  accountedGuests: 187,
+  guestCount: 3, // Initial count matching server mock database
+  accountedGuests: 3,
   evacuationActive: false,
   lockdownActive: false,
 
@@ -288,24 +288,13 @@ const Simulator = {
 
   // --- Staff Status Updates ---
   updateStaffStatus() {
-    if (!this.isRunning) return;
-
-    const staff = Utils.pick(this.staff.filter(s => s.status !== 'off-duty'));
-    if (!staff) return;
-
-    const transitions = {
-      'available': ['responding', 'available'],
-      'responding': ['engaged', 'available'],
-      'engaged': ['available', 'responding'],
-    };
-
-    const newStatus = Utils.pick(transitions[staff.status] || ['available']);
-    if (newStatus !== staff.status) {
-      staff.status = newStatus;
-      staff.floor = Utils.pick(FLOORS);
-      EventBus.emit('staff-update', staff);
-    }
+    // Staff status updates removed for manual control or can be toggled via simulation
+    // This allows the operator to assign staff manually without them 'wandering'
   },
+
+
+
+
 
   // --- Threat Level ---
   updateThreatLevel() {
@@ -314,7 +303,7 @@ const Simulator = {
     const highCount = activeIncidents.filter(i => i.severity === 'high').length;
 
     let score = criticalCount * 30 + highCount * 15 + activeIncidents.length * 5;
-    score = Math.min(100, Math.max(5, score + Utils.random(-5, 5)));
+    score = Math.min(100, Math.max(5, score));
 
     this.threatScore = score;
 
@@ -391,16 +380,22 @@ const Simulator = {
     EventBus.emit('evacuation', true);
 
     // Simulate guest accounting
-    const interval = setInterval(() => {
+    const evacInterval = setInterval(() => {
       if (this.accountedGuests >= this.guestCount) {
-        clearInterval(interval);
+        clearInterval(evacInterval);
+        const idx = this.intervals.indexOf(evacInterval);
+        if (idx > -1) this.intervals.splice(idx, 1);
+        
         Toast.show('success', 'Evacuation Complete', 'All guests accounted for.');
         return;
       }
       this.accountedGuests = Math.min(this.guestCount, this.accountedGuests + Utils.random(3, 8));
       EventBus.emit('evacuation-update', { accounted: this.accountedGuests, total: this.guestCount });
     }, 2000);
+    
+    this.intervals.push(evacInterval);
   },
+
 
   triggerAllClear() {
     this.lockdownActive = false;

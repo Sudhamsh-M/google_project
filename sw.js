@@ -3,7 +3,11 @@
    Push Notifications & Offline Cache
    ============================================ */
 
-const CACHE_NAME = 'aegis-guest-v1';
+const CACHE_NAME = 'aegis-guest-v5';
+
+
+
+
 const ASSETS_TO_CACHE = [
   '/guest',
   '/css/guest.css',

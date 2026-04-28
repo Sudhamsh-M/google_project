@@ -362,7 +362,11 @@ function handleGuestStatus(req, res) {
 
 function handleGuestCount(req, res) {
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ count: guestSubscriptions.length }));
+  res.end(JSON.stringify({ 
+    subscriptions: guestSubscriptions.length,
+    database: Object.keys(GUEST_DATABASE).length,
+    count: Object.keys(GUEST_DATABASE).length // Use the database registry as the source of truth
+  }));
 }
 
 async function handleGuestMagicLink(req, res) {
@@ -392,7 +396,7 @@ async function handleGuestMagicLink(req, res) {
   if (twilioClient) {
     try {
       await twilioClient.messages.create({
-        body: `Welcome to AEGIS Safety at Grand Meridian. Your Zero-Touch Emergency Portal is ready: ${magicUrl}`,
+        body: `AEGIS Safety Portal: ${magicUrl}`,
         from: process.env.TWILIO_PHONE_NUMBER,
         to: guest.phone
       });
@@ -412,6 +416,67 @@ async function handleGuestMagicLink(req, res) {
       simulatedUrl: magicUrl
     }));
   }
+}
+
+async function handleGuestAdd(req, res) {
+  const body = await readRequestBody(req);
+  let payload;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Invalid JSON' }));
+    return;
+  }
+
+  const { room, name, floor, phone, sendMagicLink } = payload;
+  if (!room || !name) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Room and Name are required' }));
+    return;
+  }
+
+  // Update mock database
+  // Normalize floor: "Floor 1" -> 1
+  let normalizedFloor = floor;
+  if (typeof floor === 'string' && floor.startsWith('Floor ')) {
+    normalizedFloor = parseInt(floor.replace('Floor ', ''));
+  } else if (floor === 'Lobby') {
+    normalizedFloor = 0;
+  }
+
+  GUEST_DATABASE[room] = {
+    name,
+    floor: normalizedFloor,
+    phone: phone || null
+  };
+
+  console.log(`[GUEST] Manually added guest: ${name} to Room ${room}`);
+
+  let smsSent = false;
+  if (sendMagicLink && phone && twilioClient) {
+    try {
+      const host = req.headers.host;
+      const protocol = req.headers['x-forwarded-proto'] || 'http';
+      const magicUrl = `${protocol}://${host}/guest?magic_room=${room}`;
+
+      await twilioClient.messages.create({
+        body: `AEGIS Safety Portal: ${magicUrl}`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: phone
+      });
+      smsSent = true;
+    } catch (err) {
+      console.error('[SMS] Magic Link error during add:', err.message);
+    }
+  }
+
+  res.writeHead(200, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({
+    success: true,
+    guest: GUEST_DATABASE[room],
+    smsSent
+  }));
 }
 
 async function handleGuestNotify(req, res) {
@@ -450,38 +515,27 @@ async function handleGuestNotify(req, res) {
     url: '/guest',
   });
 
-  // Filter by floors if specified
-  let targets = guestSubscriptions;
+  // 1. Process PUSH NOTIFICATIONS (for active browser sessions)
+  let pushTargets = guestSubscriptions;
   if (floors && Array.isArray(floors) && floors.length > 0) {
-    targets = guestSubscriptions.filter(s => floors.includes(s.floor));
+    pushTargets = guestSubscriptions.filter(s => {
+      const subFloor = typeof s.floor === 'string' ? s.floor.replace('Floor ', '') : s.floor;
+      return floors.some(f => {
+        const targetFloor = typeof f === 'string' ? f.replace('Floor ', '') : f;
+        return String(subFloor) === String(targetFloor);
+      });
+    });
   }
 
-  let sent = 0;
-  let failed = 0;
+  let sentPush = 0;
+  let failedPush = 0;
 
-  const sendPromises = targets.map(async (guest) => {
+  const pushPromises = pushTargets.map(async (guest) => {
     try {
-      // 1. Send Push Notification
       await webpush.sendNotification(guest.subscription, notifPayload);
-      sent++;
-
-      // 2. Send SMS via Twilio if phone is linked
-      if (twilioClient && guest.phone) {
-        // Construct Magic Link for the SMS
-        const host = req.headers.host;
-        const protocol = req.headers['x-forwarded-proto'] || 'http';
-        const magicUrl = `${protocol}://${host}/guest?magic_room=${guest.room}`;
-
-        await twilioClient.messages.create({
-          body: `🚨 EMERGENCY ALERT: ${title}\n${notifBody}\n\nINSTANT SAFETY PORTAL: ${magicUrl}`,
-          from: process.env.TWILIO_PHONE_NUMBER,
-          to: guest.phone
-        });
-        console.log(`[SMS] Alert + Magic Link delivered to Room ${guest.room} (${guest.phone})`);
-      }
+      sentPush++;
     } catch (err) {
-      failed++;
-      // Remove invalid subscriptions (410 Gone or 404)
+      failedPush++;
       if (err.statusCode === 410 || err.statusCode === 404) {
         const idx = guestSubscriptions.findIndex(s => s.subscription.endpoint === guest.subscription.endpoint);
         if (idx >= 0) guestSubscriptions.splice(idx, 1);
@@ -489,11 +543,55 @@ async function handleGuestNotify(req, res) {
     }
   });
 
-  await Promise.all(sendPromises);
+  // 2. Process SMS ALERTS (for everyone in the registry with a phone number)
+  let sentSms = 0;
+  let smsPromises = [];
 
-  console.log(`[NOTIFY] Sent ${sent} notifications, ${failed} failed`);
+  if (twilioClient) {
+    const allRooms = Object.keys(GUEST_DATABASE);
+    const smsTargets = allRooms.filter(room => {
+      const guest = GUEST_DATABASE[room];
+      if (!guest.phone) return false;
+
+      // Filter by floor if requested
+      if (floors && Array.isArray(floors) && floors.length > 0) {
+        return floors.some(f => {
+          const targetFloor = typeof f === 'string' ? f.replace('Floor ', '') : f;
+          return String(guest.floor) === String(targetFloor);
+        });
+      }
+      return true;
+    });
+
+    smsPromises = smsTargets.map(async (room) => {
+      const guest = GUEST_DATABASE[room];
+      try {
+        const host = req.headers.host;
+        const protocol = req.headers['x-forwarded-proto'] || 'http';
+        const magicUrl = `${protocol}://${host}/guest?magic_room=${room}`;
+
+        await twilioClient.messages.create({
+          body: `ALERT: ${title}. Portal: ${magicUrl}`,
+          from: process.env.TWILIO_PHONE_NUMBER,
+          to: guest.phone
+        });
+        console.log(`[SMS] Alert delivered to Room ${room} (${guest.phone})`);
+        sentSms++;
+      } catch (err) {
+        console.error(`[SMS] Failed for Room ${room}:`, err.message);
+      }
+    });
+  }
+
+  await Promise.all([...pushPromises, ...smsPromises]);
+
+  console.log(`[NOTIFY] Push: ${sentPush} sent, ${failedPush} failed | SMS: ${sentSms} sent`);
   res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ sent, failed, total: targets.length }));
+  res.end(JSON.stringify({ 
+    push: { sent: sentPush, failed: failedPush },
+    sms: { sent: sentSms },
+    total: pushTargets.length 
+  }));
 }
 
 async function handleEvacuationGuide(req, res) {
@@ -618,6 +716,8 @@ async function serveStatic(req, res, pathname) {
 
 async function requestListener(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  console.log(`[${req.method}] ${url.pathname}`);
+
 
   // CORS headers for API
   if (url.pathname.startsWith('/api/')) {
@@ -655,6 +755,34 @@ async function requestListener(req, res) {
   }
   if (req.method === 'GET' && url.pathname === '/api/guest/count') {
     return handleGuestCount(req, res);
+  }
+  if (req.method === 'GET' && url.pathname === '/api/guest/list') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      guests: GUEST_DATABASE,
+      subscriptions: guestSubscriptions.map(s => ({ room: s.room, subscribedAt: s.subscribedAt }))
+    }));
+    return;
+  }
+  if (req.method === 'POST' && url.pathname === '/api/guest/add') {
+    return handleGuestAdd(req, res);
+  }
+  if (req.method === 'POST' && url.pathname === '/api/guest/remove') {
+    const body = await readRequestBody(req);
+    const { room } = JSON.parse(body);
+    if (room && GUEST_DATABASE[room]) {
+      delete GUEST_DATABASE[room];
+      // Also remove any active subscriptions for this room
+      const idx = guestSubscriptions.findIndex(s => String(s.room) === String(room));
+      if (idx >= 0) guestSubscriptions.splice(idx, 1);
+      
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true }));
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Room not found' }));
+    }
+    return;
   }
   if (req.method === 'POST' && url.pathname === '/api/guest/magic-link') {
     return handleGuestMagicLink(req, res);

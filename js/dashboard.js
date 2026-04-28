@@ -114,10 +114,18 @@ const DashboardView = {
               <span class="text-xs text-tertiary" id="guest-sub-count">0 guests</span>
             </div>
           </div>
-          <div class="quick-actions-grid">
+          <div class="quick-actions-grid" style="grid-template-columns: repeat(2, 1fr);">
             <button class="quick-action-btn qr-code" onclick="DashboardView.showQRModal()" id="btn-qr-code">
               ${Icons.building}
               <span>Room QR</span>
+            </button>
+            <button class="quick-action-btn" onclick="DashboardView.showManualGuestModal()" id="btn-add-guest">
+              ${Icons.plus}
+              <span>Add Guest</span>
+            </button>
+            <button class="quick-action-btn" onclick="DashboardView.showGuestListModal()" id="btn-guest-list">
+              ${Icons.personnel}
+              <span>Guest List</span>
             </button>
             <button class="quick-action-btn alert-guests" onclick="DashboardView.showGuestAlertModal()" id="btn-alert-guests">
               ${Icons.bell}
@@ -457,8 +465,17 @@ const DashboardView = {
       const res = await fetch('/api/guest/count');
       if (!res.ok) return;
       const data = await res.json();
+      
+      // Sync Simulator count with actual registered guests
+      const newCount = data.count || 0;
+      Simulator.guestCount = newCount;
+      Simulator.accountedGuests = newCount;
+      
       const countEl = document.getElementById('guest-sub-count');
-      if (countEl) countEl.textContent = `${data.count} guest${data.count !== 1 ? 's' : ''}`;
+      if (countEl) countEl.textContent = `${newCount} guest${newCount !== 1 ? 's' : ''}`;
+      
+      const mainCountEl = document.getElementById('guest-count');
+      if (mainCountEl) mainCountEl.textContent = newCount;
     } catch { /* silently fail */ }
   },
 
@@ -484,7 +501,7 @@ const DashboardView = {
       });
       if (!res.ok) return;
       const data = await res.json();
-      Toast.show('info', 'Guest Alert Sent', `Notified ${data.sent} of ${data.total} guests`);
+      Toast.show('info', 'Emergency Alert Sent', `Notified ${data.push.sent} browser sessions & ${data.sms.sent} phones via SMS.`);
     } catch (err) {
       console.error('Guest notify error:', err);
     }
@@ -527,6 +544,195 @@ const DashboardView = {
 
     overlay.classList.add('active');
     this.generateQR();
+  },
+
+  showManualGuestModal() {
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('modal-content');
+    if (!overlay || !modal) return;
+
+    modal.innerHTML = `
+      <div class="modal-header">
+        <div class="modal-title">Manual Guest Registration</div>
+        <button class="modal-close" onclick="App.closeModal()">${Icons.x}</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Guest Name</label>
+        <input class="form-input" id="guest-name-input" placeholder="Full name" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Room Number</label>
+        <input class="form-input" id="guest-room-input" placeholder="e.g. 101" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Floor</label>
+        <select class="form-select" id="guest-floor-input">
+          ${FLOORS.map(f => `<option value="${f}">${f}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone Number (SMS Alerts)</label>
+        <input class="form-input" id="guest-phone-input" placeholder="+1234567890" />
+      </div>
+      <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="send-magic-link" checked />
+        <label for="send-magic-link" class="text-xs">Send Magic Link via SMS</label>
+      </div>
+      <div style="display: flex; gap: 12px; padding-top: 8px;">
+        <button class="btn btn-ghost" onclick="App.closeModal()" style="flex: 1;">Cancel</button>
+        <button class="btn btn-primary" onclick="DashboardView.submitManualGuest()" style="flex: 1;" id="btn-submit-guest">
+          ${Icons.check} Register Guest
+        </button>
+      </div>
+    `;
+
+    overlay.classList.add('active');
+  },
+
+  async submitManualGuest() {
+    const name = document.getElementById('guest-name-input')?.value;
+    const room = document.getElementById('guest-room-input')?.value;
+    const floor = document.getElementById('guest-floor-input')?.value;
+    const phone = document.getElementById('guest-phone-input')?.value;
+    const sendMagicLink = document.getElementById('send-magic-link')?.checked;
+
+    if (!name || !room) {
+      Toast.show('warning', 'Missing Fields', 'Name and Room Number are required');
+      return;
+    }
+
+    const btn = document.getElementById('btn-submit-guest');
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = 'Registering...';
+    }
+
+    try {
+      const res = await fetch('/api/guest/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, room, floor, phone, sendMagicLink })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Registration failed');
+      }
+
+      Toast.show('success', 'Guest Registered', `Room ${room} — ${name}`);
+
+      // Clear inputs
+      if (document.getElementById('guest-name-input')) document.getElementById('guest-name-input').value = '';
+      if (document.getElementById('guest-room-input')) document.getElementById('guest-room-input').value = '';
+      if (document.getElementById('guest-phone-input')) document.getElementById('guest-phone-input').value = '';
+      
+      await this.fetchGuestCount();
+      App.closeModal();
+    } catch (err) {
+      console.error('Manual registration error:', err);
+      Toast.show('critical', 'Error', err.message || 'Failed to register guest');
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `${Icons.check} Register Guest`;
+      }
+    }
+  },
+
+  async showGuestListModal() {
+    const overlay = document.getElementById('modal-overlay');
+    const modal = document.getElementById('modal-content');
+    if (!overlay || !modal) return;
+
+    modal.innerHTML = `
+      <div class="modal-header">
+        <div class="modal-title">Registered Guests</div>
+        <button class="modal-close" onclick="App.closeModal()">${Icons.x}</button>
+      </div>
+      <div id="guest-list-container" style="max-height: 400px; overflow-y: auto; margin-top: 12px;">
+        <div class="loading-state" style="padding: 20px; text-align: center; color: var(--text-tertiary);">
+          Loading guest directory...
+        </div>
+      </div>
+    `;
+
+    overlay.classList.add('active');
+
+    try {
+      const res = await fetch('/api/guest/list');
+      const data = await res.json();
+      
+      const container = document.getElementById('guest-list-container');
+      const rooms = Object.keys(data.guests).sort((a, b) => parseInt(a) - parseInt(b));
+      
+      if (rooms.length === 0) {
+        container.innerHTML = '<div style="padding: 40px; text-align: center; color: var(--text-tertiary);">No guests registered in system.</div>';
+        return;
+      }
+
+      container.innerHTML = `
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+          <thead>
+            <tr style="text-align: left; color: var(--text-tertiary); border-bottom: 1px solid var(--border-subtle);">
+              <th style="padding: 8px 4px;">Room</th>
+              <th style="padding: 8px 4px;">Guest Name</th>
+              <th style="padding: 8px 4px;">Status</th>
+              <th style="padding: 8px 4px; text-align: right;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rooms.map(roomNum => {
+              const guest = data.guests[roomNum];
+              const isSubscribed = data.subscriptions.some(s => String(s.room) === String(roomNum));
+              return `
+                <tr style="border-bottom: 1px solid var(--border-subtle);">
+                  <td style="padding: 12px 4px; font-weight: 600; color: var(--accent-blue);">#${roomNum}</td>
+                  <td style="padding: 12px 4px;">
+                    <div>${guest.name}</div>
+                    <div style="font-size: 0.7rem; color: var(--text-tertiary);">${guest.phone || 'No phone linked'}</div>
+                  </td>
+                  <td style="padding: 12px 4px;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                      <div class="status-dot ${isSubscribed ? 'available' : 'off-duty'}"></div>
+                      <span style="font-size: 0.72rem;">${isSubscribed ? 'Live App' : 'Pre-Reg'}</span>
+                    </div>
+                  </td>
+                  <td style="padding: 12px 4px; text-align: right;">
+                    <button class="btn btn-ghost" style="padding: 4px 8px; font-size: 0.7rem; color: var(--severity-critical);" 
+                            onclick="DashboardView.deleteGuest('${roomNum}')">
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    } catch (err) {
+      console.error('Failed to fetch guest list:', err);
+      container.innerHTML = '<div style="padding: 20px; color: var(--severity-critical);">Error loading guests.</div>';
+    }
+  },
+
+  async deleteGuest(room) {
+    if (!confirm(`Are you sure you want to remove the guest from Room ${room}?`)) return;
+    
+    try {
+      const res = await fetch('/api/guest/remove', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ room })
+      });
+      
+      if (res.ok) {
+        Toast.show('info', 'Guest Removed', `Room ${room} has been cleared.`);
+        this.showGuestListModal(); // Refresh
+        this.fetchGuestCount(); // Update counters
+      }
+    } catch (err) {
+      Toast.show('critical', 'Error', 'Failed to remove guest');
+    }
   },
 
   updateQRRoomList() {

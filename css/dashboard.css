@@ -39,10 +39,11 @@
   height: 2px;
 }
 
-.metric-card.blue::before { background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan)); }
-.metric-card.red::before { background: linear-gradient(90deg, var(--severity-critical), #f97316); }
-.metric-card.amber::before { background: linear-gradient(90deg, var(--severity-medium), #f59e0b); }
-.metric-card.green::before { background: linear-gradient(90deg, var(--severity-low), #10b981); }
+.metric-card.blue::before { background: linear-gradient(90deg, #d4a843, #e8c55a); }
+.metric-card.red::before { background: linear-gradient(90deg, var(--severity-critical), #dd6b20); }
+.metric-card.amber::before { background: linear-gradient(90deg, var(--severity-medium), #d4a843); }
+.metric-card.green::before { background: linear-gradient(90deg, var(--severity-low), #48bb78); }
+
 
 .metric-icon {
   width: 38px;
@@ -455,10 +456,11 @@
   transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.metric-bar-fill.blue { background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan)); }
-.metric-bar-fill.green { background: linear-gradient(90deg, var(--severity-low), #10b981); }
-.metric-bar-fill.amber { background: linear-gradient(90deg, var(--severity-medium), #f59e0b); }
-.metric-bar-fill.red { background: linear-gradient(90deg, var(--severity-critical), #f97316); }
+.metric-bar-fill.blue { background: linear-gradient(90deg, #d4a843, #e8c55a); }
+.metric-bar-fill.green { background: linear-gradient(90deg, var(--severity-low), #48bb78); }
+.metric-bar-fill.amber { background: linear-gradient(90deg, var(--severity-medium), #d4a843); }
+.metric-bar-fill.red { background: linear-gradient(90deg, var(--severity-critical), #dd6b20); }
+
 
 .metric-bar-value {
   font-size: 0.78rem;
