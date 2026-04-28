@@ -1,3 +1,4 @@
+require('dotenv').config();
 const http = require('http');
 const fs = require('fs').promises;
 const path = require('path');
@@ -127,9 +128,9 @@ function setupTwilio() {
 let db = null;
 function setupFirebase() {
   try {
-    const projectId = process.env.FIREBASE_PROJECT_ID;
-    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    const projectId = process.env.FIREBASE_PROJECT_ID?.replace(/^"|"$/g, '').trim();
+    const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.replace(/^"|"$/g, '').trim();
+    let privateKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
     
     if (privateKey) {
       // Fix accidental extra quotes and correctly format newlines
@@ -138,10 +139,11 @@ function setupFirebase() {
     
     if (projectId && clientEmail && privateKey) {
       admin.initializeApp({
-        credential: admin.credential.cert({ projectId, clientEmail, privateKey })
+        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+        databaseId: '(default)'
       });
       db = admin.firestore();
-      console.log('[DB] Firebase Firestore connected');
+      console.log(`[DB] Firebase Firestore connected to project: ${projectId}`);
 
       // Load initial system status from DB
       db.collection('system').doc('status').get().then(doc => {
